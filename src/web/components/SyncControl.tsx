@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import type { SyncRunId } from "../../shared/brand";
 import type { SyncRun } from "../../shared/schemas";
 import { fetchSyncRun, startSync } from "../api";
-import { isActive, syncProgressLabel } from "../sync-view";
+import { followedRunId, isActive, syncProgressLabel } from "../sync-view";
 import { Button } from "@/components/ui/button";
 
 const POLL_MS = 2000;
@@ -22,8 +22,12 @@ function announce(run: SyncRun) {
 /** "Sync now" + live progress; follows a run started here or one already active (scheduled/other tab). */
 export function SyncControl({ activeRun }: { activeRun: SyncRun | null }) {
   const qc = useQueryClient();
-  const [startedId, setStartedId] = useState<SyncRunId | null>(null);
-  const id = startedId ?? activeRun?.id ?? null;
+  // The run being followed: one started here or first seen active in meta. Kept until its finish is
+  // observed, so a meta refresh that drops it from activeRun can't hide the finish.
+  const [followed, setFollowed] = useState<SyncRunId | null>(null);
+  const activeId = activeRun?.id ?? null;
+  useEffect(() => setFollowed((f) => followedRunId(f, activeId)), [activeId]);
+  const id = followedRunId(followed, activeId);
 
   // Disabling the button needs a render; a fast double click lands before it.
   const inFlight = useRef(false);
@@ -32,7 +36,7 @@ export function SyncControl({ activeRun }: { activeRun: SyncRun | null }) {
     onSettled: () => { inFlight.current = false; },
     onSuccess: (run) => {
       qc.setQueryData(["sync", run.id], run);
-      setStartedId(run.id);
+      setFollowed(run.id);
     },
     onError: (e) => toast.error(`Couldn't start sync: ${e.message}`),
   });
@@ -53,7 +57,7 @@ export function SyncControl({ activeRun }: { activeRun: SyncRun | null }) {
     else if (r && wasActive.current) {
       wasActive.current = false;
       announce(r);
-      setStartedId(null);
+      setFollowed(null);
       for (const key of ["rfqs", "facets", "meta"]) qc.invalidateQueries({ queryKey: [key] });
     }
   }, [run.data, qc]);

@@ -4,6 +4,7 @@ import { DEFAULT_LIST_OPTIONS, type Rfq } from "../shared/schemas";
 import { fetchFacets, fetchMeta, fetchRfqs } from "./api";
 import { activeChips } from "./chips";
 import { todayIso } from "./format";
+import { toQueryText } from "./inputs";
 import { toggleSort } from "./url-state";
 import { useRowKeyboard } from "./use-row-keyboard";
 import { useUrlState } from "./use-url-state";
@@ -66,7 +67,7 @@ function Browser() {
         </div>
       ) : (
         <>
-          <SearchBox value={query.q ?? ""} onChange={(q) => set({ q: q.trim() || undefined })} />
+          <SearchBox value={query.q ?? ""} onChange={(q) => set({ q: toQueryText(q) })} />
           <FilterBar query={query} set={set} facets={facets.data} meta={meta.data} />
           <ActiveChips query={query} set={set} onClearAll={clearFilters} />
           {rfqs.isError && <ErrorBanner message={rfqs.error.message} onRetry={() => rfqs.refetch()} />}

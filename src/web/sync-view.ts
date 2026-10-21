@@ -1,3 +1,4 @@
+import type { SyncRunId } from "../shared/brand";
 import type { SyncRun } from "../shared/schemas";
 
 const FINISHED_DAY = new Set(["complete", "partial", "failed"]);
@@ -35,3 +36,7 @@ export function dataBadge(dataAsOf: string | null, lastRun: SyncRun | null, form
     details: lastRun.days.map((d) => `${d.date}: ${d.parsed}/${d.expected ?? "?"}${d.error ? ` (${d.error})` : ""}`),
   };
 }
+
+/** Keep following a run once seen, even after meta stops listing it as active (its finish must still be seen). */
+export const followedRunId = (current: SyncRunId | null, active: SyncRunId | null): SyncRunId | null =>
+  current ?? active;

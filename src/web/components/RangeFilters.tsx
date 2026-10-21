@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import { ChevronDownIcon } from "lucide-react";
-import { IsoDate } from "../../shared/brand";
+import type { IsoDate } from "../../shared/brand";
 import type { RfqQuery } from "../../shared/schemas";
 import { TECH_DOCS_LABELS } from "../labels";
+import { dateInputCommit } from "../inputs";
 import { setBound } from "../ranges";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,12 +15,24 @@ type Props = { query: RfqQuery; set: (next: Partial<RfqQuery>) => void };
 const PRESETS = [3, 7, 14] as const;
 const TECH_DOCS = ["any", "available", "spec_only", "none"] as const;
 
-const toDate = (v: string) => (IsoDate.safeParse(v).success ? IsoDate.parse(v) : undefined);
+/** Date box with local text: half-typed years never reach the URL (or drag the other bound). */
+function DateInput({ label, value, onCommit }: { label: string; value?: IsoDate; onCommit: (v?: IsoDate) => void }) {
+  const [text, setText] = useState(value ?? "");
+  useEffect(() => setText(value ?? ""), [value]);
+  return (
+    <Input type="date" aria-label={label} value={text}
+      onChange={(e) => {
+        setText(e.target.value);
+        const c = dateInputCommit(e.target.value);
+        if (c.commit && c.value !== value) onCommit(c.value);
+      }} />
+  );
+}
 
 function ClosesWithin({ query, set }: Props) {
   const active = query.closesWithinDays !== undefined || query.returnByFrom || query.returnByTo;
-  const setDate = (side: "lo" | "hi", v: string) => {
-    const r = setBound({ lo: query.returnByFrom, hi: query.returnByTo }, side, toDate(v));
+  const setDate = (side: "lo" | "hi", v?: IsoDate) => {
+    const r = setBound({ lo: query.returnByFrom, hi: query.returnByTo }, side, v);
     set({ returnByFrom: r.lo, returnByTo: r.hi, closesWithinDays: undefined });
   };
   return (
@@ -41,11 +54,9 @@ function ClosesWithin({ query, set }: Props) {
         </div>
         <div className="text-muted-foreground text-xs">or return-by range</div>
         <div className="flex items-center gap-2">
-          <Input type="date" aria-label="Return by from" value={query.returnByFrom ?? ""}
-            onChange={(e) => setDate("lo", e.target.value)} />
+          <DateInput label="Return by from" value={query.returnByFrom} onCommit={(v) => setDate("lo", v)} />
           <span>–</span>
-          <Input type="date" aria-label="Return by to" value={query.returnByTo ?? ""}
-            onChange={(e) => setDate("hi", e.target.value)} />
+          <DateInput label="Return by to" value={query.returnByTo} onCommit={(v) => setDate("hi", v)} />
         </div>
       </PopoverContent>
     </Popover>
