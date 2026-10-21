@@ -1,0 +1,19 @@
+services:
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: rfq
+      POSTGRES_PASSWORD: rfq
+      POSTGRES_DB: rfq
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./docker/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rfq"]
+      interval: 2s
+      retries: 30
+
+volumes:
+  pgdata:

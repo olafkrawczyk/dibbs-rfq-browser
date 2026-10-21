@@ -1,0 +1,31 @@
+{
+  "name": "interview",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "db:up": "docker compose up -d",
+    "migrate": "bun src/db/migrate.ts",
+    "dev": "bun --hot src/server/index.ts",
+    "start": "bun src/server/index.ts",
+    "worker": "bun src/worker/index.ts",
+    "sync": "bun src/cli/sync.ts",
+    "test": "bun test",
+    "typecheck": "bun check"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.104.5",
+    "cheerio": "^1.2.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sonner": "^2.0.8",
+    "zod": "^4.6.7"
+  }
+}
