@@ -75,3 +75,9 @@ export async function getFscNames(sql: SQL): Promise<Record<string, string>> {
   const rows: { code: string; name: string }[] = await sql`select code, name from fsc_names order by code`;
   return Object.fromEntries(rows.map((r) => [r.code, r.name]));
 }
+
+/** When the data was last confirmed against DIBBS (latest last_seen_at), or null when empty. */
+export async function getDataAsOf(sql: SQL): Promise<string | null> {
+  const [row]: { asOf: Date | null }[] = await sql`select max(last_seen_at) as "asOf" from rfqs`;
+  return row?.asOf ? row.asOf.toISOString() : null;
+}
