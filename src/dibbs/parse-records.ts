@@ -20,6 +20,11 @@ export type RecordsPage = {
   invalid: InvalidRow[];
 };
 
+/** The HTML is not a DIBBS records listing (consent wall, error/maintenance page, layout change). */
+export class NotARecordsPageError extends Error {
+  override name = "NotARecordsPageError";
+}
+
 const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
 
 const cell = (row: Cheerio<AnyNode>, name: string) => row.find(`span[id$='_lbl${name}']`).first();
@@ -100,6 +105,10 @@ function buildRow($: CheerioAPI, row: Cheerio<AnyNode>, postedDate: IsoDate): un
 /** DIBBS records page HTML → validated rows; rows that fail validation are reported, never dropped silently. */
 export function parseRecordsPage(html: string, postedDate: IsoDate): RecordsPage {
   const $ = cheerio.load(html);
+  // A real listing (even with 0 records) always has the record-count label or the grid.
+  if ($("#ctl00_cph1_lblRecCount").length === 0 && $("#ctl00_cph1_grdRfqSearch").length === 0) {
+    throw new NotARecordsPageError(`not a records page for ${postedDate}`);
+  }
   const rows: ScrapedRfq[] = [];
   const invalid: InvalidRow[] = [];
 

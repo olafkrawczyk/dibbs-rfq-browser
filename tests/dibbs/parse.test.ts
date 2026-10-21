@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { IsoDate } from "../../src/shared/brand";
-import { parseRecordsPage } from "../../src/dibbs/parse-records";
+import { NotARecordsPageError, parseRecordsPage } from "../../src/dibbs/parse-records";
 import { parseRecentDates } from "../../src/dibbs/parse-dates";
 import { parseFscNames } from "../../src/dibbs/parse-fsc";
 import { fixture } from "../helpers/fixtures";
@@ -58,10 +58,16 @@ describe("parseRecordsPage", () => {
     expect(page.rows[0]).toMatchObject({ prNumber: "", quantity: 57000 });
   });
 
-  test("empty html → nothing", () => {
-    expect(parseRecordsPage("<html></html>", DAY)).toMatchObject({
-      totalRecords: 0, currentPage: 1, nextPage: null, rows: [], invalid: [],
-    });
+  test("a page that is not a records listing is an error, not an empty day", () => {
+    for (const name of ["consent.html", "fsc.html", "dates-recent.html"]) {
+      expect(() => parseRecordsPage(fixture(name), DAY)).toThrow(NotARecordsPageError);
+    }
+    expect(() => parseRecordsPage("<html>maintenance</html>", DAY)).toThrow(NotARecordsPageError);
+  });
+
+  test("a genuine zero-records page is fine", () => {
+    const html = '<span id="ctl00_cph1_lblRecCount">Records Found: <strong> 0</strong></span>';
+    expect(parseRecordsPage(html, DAY)).toMatchObject({ totalRecords: 0, currentPage: 1, nextPage: null, rows: [] });
   });
 });
 

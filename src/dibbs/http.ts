@@ -12,9 +12,12 @@ type Options = {
   delayMs: number;
   sleep?: (ms: number) => Promise<void>;
   maxRetries?: number;
+  /** Whole-request deadline; a stalled DIBBS response is aborted and retried. */
+  timeoutMs?: number;
 };
 
 const MAX_REDIRECTS = 10;
+const DEFAULT_TIMEOUT_MS = 60_000;
 const USER_AGENT = "dibbs-rfq-browser/0.1 (+polite sequential sync)";
 
 /**
@@ -24,6 +27,7 @@ const USER_AGENT = "dibbs-rfq-browser/0.1 (+polite sequential sync)";
 export function createDibbsHttp(opts: Options): DibbsHttp {
   const sleep = opts.sleep ?? ((ms: number) => Bun.sleep(ms));
   const maxRetries = opts.maxRetries ?? 3;
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const jar = new Map<string, Map<string, string>>();
 
   const cookieHeader = (url: string) =>
@@ -49,6 +53,7 @@ export function createDibbsHttp(opts: Options): DibbsHttp {
         res = await opts.fetch(url, {
           method,
           redirect: "manual",
+          signal: AbortSignal.timeout(timeoutMs),
           body: body?.toString(),
           headers: {
             cookie: cookieHeader(url),
@@ -92,7 +97,11 @@ export function createDibbsHttp(opts: Options): DibbsHttp {
     if (isConsentPage(after.html)) throw new Error("DIBBS consent was not accepted");
     // DIBBS's goto= redirect drops the original query string, so a GET is re-issued against the real URL.
     // A POST (postback) cannot be replayed: its caller restarts from a fresh GET (reconsented=true).
-    if (method === "GET" && after.url !== url) return { ...(await request("GET", url)), reconsented: true };
+    if (method === "GET" && after.url !== url) {
+      const again = await request("GET", url);
+      if (isConsentPage(again.html)) throw new Error("DIBBS consent was not accepted");
+      return { ...again, reconsented: true };
+    }
     return { ...after, reconsented: true };
   }
 

@@ -113,3 +113,28 @@ test("maxPages stops early and marks the day truncated", async () => {
   expect(pages).toEqual([1, 2]);
   expect(result).toEqual({ expected: 2148, parsed: 100, invalid: 0, pages: 2, truncated: true });
 });
+
+test("non-listing page fails the day instead of completing it empty", async () => {
+  const { client } = setup(() => html(fixture("fsc.html")));
+  await expect(client.fetchDay(DAY, async () => {})).rejects.toThrow(/not a records page/);
+});
+
+test("consent that keeps coming back is an error", async () => {
+  const { http } = setup((req) => {
+    if (req.method === "POST") return redirect(`${BASE}//rfq/landing`);
+    return html(req.url.endsWith("landing") ? "<html>landing</html>" : CONSENT); // re-GET is still the wall
+  });
+  await expect(http.get(DAY_URL)).rejects.toThrow(/consent was not accepted/);
+});
+
+test("a request that never finishes times out and goes through retries", async () => {
+  let calls = 0;
+  const hanging = (_url: string, init?: RequestInit) => {
+    calls++;
+    return new Promise<Response>((_, reject) =>
+      init?.signal?.addEventListener("abort", () => reject(new Error("request timed out"))));
+  };
+  const http = createDibbsHttp({ fetch: hanging, delayMs: 0, sleep: async () => {}, timeoutMs: 20 });
+  await expect(http.get(DAY_URL)).rejects.toThrow(/timed out|abort/i);
+  expect(calls).toBe(4);
+});
