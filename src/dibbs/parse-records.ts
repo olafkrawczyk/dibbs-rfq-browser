@@ -1,6 +1,6 @@
 import * as cheerio from "cheerio";
 import type { Cheerio, CheerioAPI } from "cheerio";
-import type { Element } from "domhandler";
+import type { AnyNode } from "domhandler";
 import type { IsoDate } from "../shared/brand";
 import {
   normalizeSetAside, normalizeSolicitation, normalizeStatus, normalizeTechDocs,
@@ -22,7 +22,7 @@ export type RecordsPage = {
 
 const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
 
-const cell = (row: Cheerio<Element>, name: string) => row.find(`span[id$='_lbl${name}']`).first();
+const cell = (row: Cheerio<AnyNode>, name: string) => row.find(`span[id$='_lbl${name}']`).first();
 
 function readTotal($: CheerioAPI): number {
   const m = /([\d,]+)/.exec($("#ctl00_cph1_lblRecCount").text());
@@ -41,13 +41,13 @@ function readPager($: CheerioAPI): { currentPage: number; nextPage: number | nul
 }
 
 /** Solicitation number is the first text node of the first link (before "--»Attachments"). */
-function readSolicitation($: CheerioAPI, span: Cheerio<Element>): string {
+function readSolicitation($: CheerioAPI, span: Cheerio<AnyNode>): string {
   const link = span.find("a").first();
   const text = link.length ? link.contents().first().text() : span.text();
   return collapse(text).split(" ")[0] ?? "";
 }
 
-function readSetAsideAlt($: CheerioAPI, span: Cheerio<Element>): string | null {
+function readSetAsideAlt($: CheerioAPI, span: Cheerio<AnyNode>): string | null {
   const img = span
     .find("img")
     .toArray()
@@ -55,12 +55,12 @@ function readSetAsideAlt($: CheerioAPI, span: Cheerio<Element>): string | null {
   return img ? ($(img).attr("alt") ?? null) : null;
 }
 
-function readItemText(span: Cheerio<Element>): string {
+function readItemText(span: Cheerio<AnyNode>): string {
   const link = span.find("a").first();
   return collapse(link.length ? link.text() : span.text().replace(/Mil-Spec/i, ""));
 }
 
-function buildRow($: CheerioAPI, row: Cheerio<Element>, postedDate: IsoDate): unknown {
+function buildRow($: CheerioAPI, row: Cheerio<AnyNode>, postedDate: IsoDate): unknown {
   const solSpan = cell(row, "Solicitation");
   const docsSpan = cell(row, "TechnicalDocuments");
   const nsnSpan = cell(row, "Nsn");
