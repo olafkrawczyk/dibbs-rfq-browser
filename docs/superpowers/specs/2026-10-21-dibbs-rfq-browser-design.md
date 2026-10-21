@@ -133,6 +133,7 @@ rfqs (
   solicitation_number text not null,
   nsn                 text,          -- 13 digits, null if part number
   part_number         text,          -- when not an NSN
+  item_key            text generated always as (coalesce(nsn, part_number)) stored,
   fsc                 text,          -- 4 digits or null
   nomenclature        text not null,
   item_name           text not null,
@@ -152,12 +153,14 @@ rfqs (
   tech_docs_url       text,
   first_seen_at       timestamptz not null,
   last_seen_at        timestamptz not null,
-  last_sync_run_id    bigint not null
+  last_sync_run_id    bigint not null,
+  search_text         text generated always as (
+                        solicitation_number || ' ' || coalesce(nsn, '') || ' ' ||
+                        coalesce(part_number, '') || ' ' || pr_number || ' ' ||
+                        nomenclature) stored,
+  constraint rfqs_one_item_id check (num_nonnulls(nsn, part_number) = 1),
+  constraint rfqs_identity unique (solicitation_number, item_key, pr_number)
 )
--- unique index rfqs_identity on (solicitation_number, coalesce(nsn, part_number), pr_number)
--- indexes: gin trigram on nomenclature, nsn, solicitation_number, pr_number,
---          part_number; btree on posted_date, return_by_date, fsc, item_name,
---          status, set_aside, quantity
 
 sync_runs (
   id            bigserial primary key,
@@ -176,18 +179,67 @@ sync_runs (
 fsc_names (code text primary key, name text not null, updated_at timestamptz)
 ```
 
-The identity key is the unique expression index `rfqs_identity`.
-Upserts update every mutable column plus `last_seen_at`; `first_seen_at` is
-never overwritten. Rows are never deleted; rows outside the current window
-stay in the DB but are not shown by default.
+Upserts use `ON CONFLICT ON CONSTRAINT rfqs_identity` and update every
+mutable column plus `last_seen_at`; `first_seen_at` is never overwritten.
+Rows are never deleted; rows outside the current window stay in the DB but
+are not shown by default.
+
+### 4.1 Indexes
+
+Sizing: the window holds ~8k rows, but history is kept, so the table grows
+~1.2k rows per posting day (~300k/year). Indexes are chosen for that growth,
+for the actual query shapes in §6, and to keep the per-sync upsert of ~8k
+rows cheap.
+
+| Index | Definition | Serves |
+|---|---|---|
+| `rfqs_identity` (unique) | `(solicitation_number, item_key, pr_number)` | Upsert conflict target; solicitation-number lookups (leading column) |
+| `rfqs_window_default` | `(posted_date desc, return_by_date, id)` | Window filter (`posted_date = any(...)`, the most selective predicate once history grows) **and** the default sort, so `limit 50` reads index order without a sort step |
+| `rfqs_return_by` | `(return_by_date, id)` | `closesWithinDays` / `returnBy` range and `returnBy` sort |
+| `rfqs_quantity` | `(quantity, id)` | Qty range, Qty sort, numeric `q` exact match |
+| `rfqs_fsc` | `(fsc)` | FSC filter (~hundreds of distinct values) |
+| `rfqs_item_name` | `(item_name)` | Item-name filter (~thousands of distinct values) |
+| `rfqs_search_trgm` | `gin (search_text gin_trgm_ops)` | `q` substring search (requires `create extension pg_trgm`) |
+
+Deliberately **not** indexed:
+- `status`, `set_aside`, `tech_docs`: a handful of values each, so the
+  planner would not use a btree on them; they are applied as filters on top
+  of the window index.
+- `last_seen_at`, `last_sync_run_id`: they change on every sync. Keeping
+  them unindexed lets Postgres do HOT updates (no index writes) for rows
+  whose indexed columns did not change, which is most rows on a re-sync.
+- `nomenclature`, `nsn`, `pr_number` individually: covered by the single
+  trigram index on `search_text`, so one predicate replaces a 5-way `OR`
+  across five GIN indexes.
+
+Search details: NSN and solicitation are stored undashed. The query builder
+matches `search_text ILIKE '%' || q || '%'` and, if `q` contains dashes,
+also the dash-stripped `q`. Trigram indexes need ≥ 3 characters; for shorter
+`q` the planner falls back to the window index, which is fine at window size.
+
+Facets run `group by <column>` over the window-filtered rows (~8k), so
+they use `rfqs_window_default` plus a hash aggregate; no per-facet index.
+
+`sync_runs`:
+- `sync_runs_one_active` — `unique ((true)) where status in ('queued',
+  'running')`. At most one active run is enforced by the database, not by
+  application timing.
+- `sync_runs_latest` — `(id desc) where status in ('complete', 'partial',
+  'failed')` for "last finished run".
+
+Verification: a seed script inserts ~300k synthetic rows, and the plan
+includes running `EXPLAIN ANALYZE` on the default list, a search, a qty
+sort and the facet queries to confirm the indexes are used.
 
 ## 5. Sync
 
 ### 5.1 Triggers and queue
 
 - `POST /api/sync`, `bun run sync` and the scheduler all insert a
-  `sync_runs` row with `status='queued'`. If a run is already `queued` or
-  `running`, that run is returned instead (no stacking).
+  `sync_runs` row with `status='queued'` via `INSERT … ON CONFLICT DO
+  NOTHING` against `sync_runs_one_active`, then select the active run. If a
+  run is already `queued` or `running`, that run is returned instead (no
+  stacking, race-free because the database enforces it).
 - The worker polls every 3 s and claims one run with
   `UPDATE … WHERE id = (SELECT id … WHERE status='queued' ORDER BY id
   FOR UPDATE SKIP LOCKED LIMIT 1)`.
