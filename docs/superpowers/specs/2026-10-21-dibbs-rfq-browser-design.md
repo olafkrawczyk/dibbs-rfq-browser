@@ -99,7 +99,7 @@ The window counts *posting dates listed by DIBBS*, not calendar days.
 | `dibbs/http.ts` | IO | Fetch with cookie jar, consent handling, delay, retries |
 | `dibbs/client.ts` | IO | `listPostingDates()`, `fetchDay(date, onPage)`, `fetchFscNames()` |
 | `db/migrate.ts` + `db/migrations/*.sql` | IO | Plain SQL migrations, run on start |
-| `db/rfq-query.ts` | pure | Filters → parameterized SQL (`{ text, values }`) for list and facets |
+| `db/rfq-query.ts` | pure | `RfqQuery` → parameterized SQL (`{ text, values }`) for list and facets; built from one small predicate function per filter field |
 | `db/rfq-repo.ts` | IO | Upsert rows, run list/facet queries |
 | `db/sync-repo.ts` | IO | Enqueue, claim, progress, finish, reap stale runs |
 | `worker/sync-job.ts` | orchestration | Runs one sync run end to end |
@@ -152,6 +152,7 @@ rfqs (
   pdf_url             text,
   tech_docs_url       text,
   first_seen_at       timestamptz not null,
+  first_seen_run_id   bigint not null, -- sync run that first inserted the row (alerts hook, §12)
   last_seen_at        timestamptz not null,
   last_sync_run_id    bigint not null,
   search_text         text generated always as (
@@ -281,6 +282,12 @@ All JSON. Schemas in `shared/schemas.ts`. Errors:
 
 ### 6.1 `GET /api/rfqs` query
 
+The query params parse into one canonical zod schema, `RfqQuery`
+(`shared/schemas.ts`), with `version: 1`. It is plain serializable data: the
+URL, the API and the SQL builder all use it, and a future saved search is
+simply a stored `RfqQuery` (§12). Paging and sort live in a separate
+`ListOptions` schema so the filter part stays reusable on its own.
+
 | Param | Example | Notes |
 |---|---|---|
 | `q` | `cathet`, `8315-01-683`, `SPE1C1-27`, `57000` | Trigram/ILIKE over NSN (dashes ignored), part number, nomenclature, solicitation, PR; if `q` is a number (commas allowed, e.g. `57,000`) it also matches `quantity` exactly |
@@ -367,7 +374,7 @@ new; status = nothing disappears silently.
 
 ## 10. Out of scope (MLP)
 
-Saved searches / alerts, RFQ detail drawer, scraping per-solicitation detail
+Saved searches / alerts (designed for in §12, not built), RFQ detail drawer, scraping per-solicitation detail
 pages, CSV export, auth, deployment.
 
 ## 11. Risks
@@ -377,3 +384,57 @@ pages, CSV export, auth, deployment.
 - Sequential paging means a full window sync is ~170 requests (~3–4 min at
   1 req/s). Acceptable; progress is visible.
 - Being polite to DIBBS: fixed delay, single worker, no parallel requests.
+
+## 12. Future: saved searches and alerts (designed for, not built)
+
+Goal: a vendor saves queries they care about (e.g. specific NSNs/part
+numbers, "FSC 5340 + small business + qty ≥ 100") and is notified when a
+sync finds new or changed matching RFQs.
+
+### 12.1 Hooks included in the MLP
+
+These are cheap now and expensive to retrofit:
+
+1. **`RfqQuery` is the single, versioned, serializable filter object**
+   (§6.1). A saved search stores it as JSON; an alert evaluates it with the
+   same `db/rfq-query.ts` builder the list endpoint uses, so results match
+   what the user sees in the UI.
+2. **One predicate per filter field** in the query builder. Adding a filter
+   (e.g. exact `nsn` / `partNumber` lists for watchlists) means adding one
+   schema field and one predicate, with no change to callers.
+3. **`rfqs.first_seen_run_id`** records which sync run inserted a row.
+   "New since the last check" becomes `first_seen_run_id > <watermark>`,
+   with no clock skew or timestamp edge cases.
+4. **`sync_runs` is a durable event log.** A finished run (`complete` or
+   `partial`, with `finished_at`) is the trigger an alert evaluator needs;
+   it can poll for finished runs past its watermark, the same way the
+   worker polls for queued runs. No in-process event bus is needed.
+
+### 12.2 Sketch of the later feature (not migrated)
+
+```sql
+saved_searches (
+  id, owner_id,                  -- requires auth, out of scope for MLP
+  name, query jsonb,             -- RfqQuery, validated by zod on read
+  alert_enabled boolean, channel text,  -- email | webhook
+  last_evaluated_run_id bigint,  -- watermark
+  created_at, updated_at
+)
+alert_hits (saved_search_id, rfq_id, sync_run_id, kind /* new|changed */,
+            notified_at, primary key (saved_search_id, rfq_id, kind))
+```
+
+Evaluator: for each finished run past the watermark, run each enabled saved
+search's `RfqQuery` plus `first_seen_run_id > watermark`, insert
+`alert_hits` (the primary key makes it idempotent), send notifications,
+advance the watermark.
+
+Open points for that design (not decided now):
+- **"Changed" alerts** (e.g. return-by extended, status → Removed) need a
+  `changed_run_id` column set only when meaningful fields change.
+- **Large watchlists** (thousands of NSNs) fit better as a
+  `watch_items(saved_search_id, item_key)` table joined on `rfqs.item_key`,
+  which would then need its own index on `item_key`.
+- **Indexes**: likely `rfqs(first_seen_run_id)`; added with the feature, not
+  now, to keep sync writes cheap.
+- **Users and auth**, plus a delivery channel (email or webhook).
