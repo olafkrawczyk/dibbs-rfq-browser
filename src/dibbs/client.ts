@@ -6,7 +6,8 @@ import { DIBBS_BASE_URL, parseRecordsPage, type RecordsPage } from "./parse-reco
 import { parseRecentDates } from "./parse-dates";
 import { parseFscNames } from "./parse-fsc";
 
-export type DayFetchResult = { expected: number; parsed: number; invalid: number; pages: number };
+/** `truncated` = stopped early because of `maxPages` (dev/demo cap), not because DIBBS ran out of pages. */
+export type DayFetchResult = { expected: number; parsed: number; invalid: number; pages: number; truncated: boolean };
 
 export type DibbsClient = {
   listPostingDates(): Promise<IsoDate[]>;
@@ -25,13 +26,16 @@ class SessionLost extends Error {}
 export const dayUrl = (date: IsoDate, base = DIBBS_BASE_URL) =>
   `${base}/RFQ/RfqRecs.aspx?category=post&TypeSrch=dt&Value=${toUsDate(date)}`;
 
-export function createDibbsClient(http: DibbsHttp, base = DIBBS_BASE_URL): DibbsClient {
+export function createDibbsClient(
+  http: DibbsHttp,
+  { base = DIBBS_BASE_URL, maxPages = null }: { base?: string; maxPages?: number | null } = {},
+): DibbsClient {
   /** One pass over a day's pages; throws SessionLost when a postback had to re-consent. */
   async function fetchDayOnce(date: IsoDate, onPage: (p: RecordsPage) => Promise<void>): Promise<DayFetchResult> {
     const url = dayUrl(date, base);
     let current = await http.get(url);
     let page = parseRecordsPage(current.html, date);
-    const result: DayFetchResult = { expected: page.totalRecords, parsed: 0, invalid: 0, pages: 0 };
+    const result: DayFetchResult = { expected: page.totalRecords, parsed: 0, invalid: 0, pages: 0, truncated: false };
 
     for (let requested = 1; ; requested++) {
       if (page.currentPage !== requested) {
@@ -42,6 +46,7 @@ export function createDibbsClient(http: DibbsHttp, base = DIBBS_BASE_URL): Dibbs
       result.invalid += page.invalid.length;
       result.pages = requested;
       if (page.nextPage === null) return result;
+      if (maxPages !== null && requested >= maxPages) return { ...result, truncated: true };
 
       current = await http.post(url, pageRequestBody(current.html, page.nextPage));
       if (current.reconsented) throw new SessionLost();

@@ -51,6 +51,13 @@ describe("parseRecordsPage", () => {
     expect(post.rows.filter((r) => r.setAside === "wosb").length).toBe(1);
   });
 
+  test("row without a PR number is kept", () => {
+    const html = fixture("records-issue-p1.html").replace(/>7018560662<br \/>QTY: 57000</, ">QTY: 57000<");
+    const page = parseRecordsPage(html, DAY);
+    expect(page.invalid).toEqual([]);
+    expect(page.rows[0]).toMatchObject({ prNumber: "", quantity: 57000 });
+  });
+
   test("empty html → nothing", () => {
     expect(parseRecordsPage("<html></html>", DAY)).toMatchObject({
       totalRecords: 0, currentPage: 1, nextPage: null, rows: [], invalid: [],

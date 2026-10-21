@@ -53,7 +53,7 @@ describe("client.fetchDay", () => {
     const { pages, onPage } = collect();
     const result = await client.fetchDay(DAY, onPage);
     expect(pages).toEqual([1, 2]);
-    expect(result).toEqual({ expected: 2148, parsed: 100, invalid: 0, pages: 2 });
+    expect(result).toEqual({ expected: 2148, parsed: 100, invalid: 0, pages: 2, truncated: false });
     expect(calls[0]!.url).toBe(DAY_URL);
     expect(calls[1]!.body).toContain("__EVENTARGUMENT=Page%242");
   });
@@ -91,4 +91,25 @@ test("listPostingDates and fetchFscNames", async () => {
     html(req.url.includes("RfqDates") ? fixture("dates-recent.html") : fixture("fsc.html")));
   expect((await client.listPostingDates())[0]).toBe("2026-10-20" as never);
   expect((await client.fetchFscNames()).length).toBeGreaterThan(500);
+});
+
+test("re-requests the original URL when consent redirects elsewhere", async () => {
+  const { http } = setup((req) => {
+    if (req.method === "POST") return redirect(`${BASE}//rfq/rfqrecs.aspx?category=post`, { "set-cookie": "dw=ok" });
+    if (!req.cookie.includes("dw=ok")) return html(CONSENT);
+    return html(req.url === DAY_URL ? P1 : "<html>empty listing</html>");
+  });
+  const page = await http.get(DAY_URL);
+  expect(page.html).toContain("lblRecCount");
+  expect(page.reconsented).toBe(true);
+});
+
+test("maxPages stops early and marks the day truncated", async () => {
+  const fake = fakeFetch((req) => html(req.method === "POST" ? P2.replace(/Page\$X&#39;/g, "Page$3&#39;") : P1));
+  const http = createDibbsHttp({ fetch: fake.fetch, delayMs: 0, sleep: async () => {} });
+  const client = createDibbsClient(http, { maxPages: 2 });
+  const pages: number[] = [];
+  const result = await client.fetchDay(DAY, async (p) => void pages.push(p.currentPage));
+  expect(pages).toEqual([1, 2]);
+  expect(result).toEqual({ expected: 2148, parsed: 100, invalid: 0, pages: 2, truncated: true });
 });

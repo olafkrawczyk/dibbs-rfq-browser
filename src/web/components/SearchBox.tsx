@@ -1,12 +1,10 @@
 import { useEffect, useRef, useState } from "react";
 import { SearchIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { isTypingTarget } from "../dom";
 
 const DEBOUNCE_MS = 200;
 const PLACEHOLDER = "Search NSN, item, solicitation, PR or quantity…";
-
-export const isTypingTarget = (t: EventTarget | null) =>
-  t instanceof HTMLElement && (t.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(t.tagName));
 
 export function SearchBox({ value, onChange }: { value: string; onChange: (q: string) => void }) {
   const [text, setText] = useState(value);

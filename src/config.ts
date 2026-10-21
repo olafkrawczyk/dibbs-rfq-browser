@@ -10,6 +10,7 @@ const EnvSchema = z.object({
   DIBBS_REQUEST_DELAY_MS: intVar(1000, 0),
   SYNC_STALE_AFTER_MINUTES: intVar(30, 1),
   PORT: intVar(3000, 1, 65535),
+  SYNC_MAX_PAGES_PER_DAY: z.preprocess((v) => (v === "" ? undefined : v), z.coerce.number().int().min(1).optional()),
 });
 
 export type Config = {
@@ -19,6 +20,8 @@ export type Config = {
   dibbsRequestDelayMs: number;
   syncStaleAfterMinutes: number;
   port: number;
+  /** Dev/demo cap on pages fetched per posting day; null = all pages. */
+  syncMaxPagesPerDay: number | null;
 };
 
 export function loadConfig(env: Record<string, string | undefined>): Config {
@@ -30,6 +33,7 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
     dibbsRequestDelayMs: e.DIBBS_REQUEST_DELAY_MS,
     syncStaleAfterMinutes: e.SYNC_STALE_AFTER_MINUTES,
     port: e.PORT,
+    syncMaxPagesPerDay: e.SYNC_MAX_PAGES_PER_DAY ?? null,
   };
 }
 

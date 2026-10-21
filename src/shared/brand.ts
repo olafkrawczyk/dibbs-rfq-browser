@@ -9,7 +9,8 @@ export type PartNumber = z.infer<typeof PartNumber>;
 export const SolicitationNumber = z.string().regex(/^[A-Z0-9]{13}$/).brand<"SolicitationNumber">();
 export type SolicitationNumber = z.infer<typeof SolicitationNumber>;
 
-export const PrNumber = z.string().regex(/^[A-Z0-9]{6,14}$/).brand<"PrNumber">();
+/** Opaque purchase request id; DIBBS sometimes leaves it blank or oddly formatted, so it is never a reason to drop a row. */
+export const PrNumber = z.string().trim().max(40).brand<"PrNumber">();
 export type PrNumber = z.infer<typeof PrNumber>;
 
 export const Fsc = z.string().regex(/^\d{4}$/).brand<"Fsc">();

@@ -90,6 +90,9 @@ export function createDibbsHttp(opts: Options): DibbsHttp {
     const consent = consentRequest(first.html, first.url);
     const after = await request("POST", consent.url, consent.body);
     if (isConsentPage(after.html)) throw new Error("DIBBS consent was not accepted");
+    // DIBBS's goto= redirect drops the original query string, so a GET is re-issued against the real URL.
+    // A POST (postback) cannot be replayed: its caller restarts from a fresh GET (reconsented=true).
+    if (method === "GET" && after.url !== url) return { ...(await request("GET", url)), reconsented: true };
     return { ...after, reconsented: true };
   }
 

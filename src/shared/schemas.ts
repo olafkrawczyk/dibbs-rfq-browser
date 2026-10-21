@@ -105,6 +105,7 @@ export const SyncDay = z.object({
   invalid: z.number().int(),
   page: z.number().int(),
   pages: z.number().int().nullable(),
+  truncated: z.boolean().optional(),
   error: z.string().optional(),
 });
 export type SyncDay = z.infer<typeof SyncDay>;
