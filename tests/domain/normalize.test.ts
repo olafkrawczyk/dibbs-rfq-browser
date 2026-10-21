@@ -24,7 +24,11 @@ test("toItemName takes noun before first comma", () => {
 test("normalizeSetAside", () => {
   expect(normalizeSetAside("Small Business Set-Aside")).toEqual({ setAside: "small_business", raw: "Small Business Set-Aside" });
   expect(normalizeSetAside("Unrestricted/Not Set Aside").setAside).toBe("unrestricted");
-  expect(normalizeSetAside("HUBZone Set-Aside")).toEqual({ setAside: "other", raw: "HUBZone Set-Aside" });
+  expect(normalizeSetAside("Service Disabled Veteran Owned Small Business (SDVosb) Set-Aside").setAside).toBe("sdvosb");
+  expect(normalizeSetAside("Woman Owned Small Business (WOSB) Set-Aside").setAside).toBe("wosb");
+  expect(normalizeSetAside("HUBZone Set-Aside").setAside).toBe("hubzone");
+  expect(normalizeSetAside("8(a) Set-Aside").setAside).toBe("8a");
+  expect(normalizeSetAside("Some Future Set-Aside")).toEqual({ setAside: "other", raw: "Some Future Set-Aside" });
   expect(normalizeSetAside(null)).toEqual({ setAside: "other", raw: null });
 });
 

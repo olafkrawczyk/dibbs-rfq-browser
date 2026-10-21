@@ -6,14 +6,24 @@ export type ItemId =
   | { kind: "nsn"; nsn: Nsn; fsc: Fsc }
   | { kind: "part"; partNumber: PartNumber };
 
-export type SetAside = "small_business" | "unrestricted" | "other";
-export const SET_ASIDES = ["small_business", "unrestricted", "other"] as const;
+export const SET_ASIDES = ["small_business", "sdvosb", "wosb", "hubzone", "8a", "unrestricted", "other"] as const;
+export type SetAside = (typeof SET_ASIDES)[number];
 
-export type RfqStatus = "open" | "removed" | "cancelled" | "awarded" | "other";
+// Order matters: specific small-business programs before the generic match.
+const SET_ASIDE_PATTERNS: [RegExp, SetAside][] = [
+  [/service disabled|sdvosb/i, "sdvosb"],
+  [/woman owned|wosb/i, "wosb"],
+  [/hubzone/i, "hubzone"],
+  [/8\s*\(a\)/i, "8a"],
+  [/small business/i, "small_business"],
+  [/unrestricted/i, "unrestricted"],
+];
+
 export const RFQ_STATUSES = ["open", "removed", "cancelled", "awarded", "other"] as const;
+export type RfqStatus = (typeof RFQ_STATUSES)[number];
 
-export type TechDocs = "available" | "spec_only" | "none";
 export const TECH_DOCS = ["available", "spec_only", "none"] as const;
+export type TechDocs = (typeof TECH_DOCS)[number];
 
 const collapse = (s: string) => s.replace(/\s+/g, " ").trim();
 
@@ -35,9 +45,8 @@ export function toItemName(nomenclature: string): ItemName {
 
 export function normalizeSetAside(alt: string | null): { setAside: SetAside; raw: string | null } {
   const raw = alt === null ? null : collapse(alt);
-  if (raw && /small business/i.test(raw)) return { setAside: "small_business", raw };
-  if (raw && /unrestricted/i.test(raw)) return { setAside: "unrestricted", raw };
-  return { setAside: "other", raw };
+  const hit = raw ? SET_ASIDE_PATTERNS.find(([re]) => re.test(raw)) : undefined;
+  return { setAside: hit ? hit[1] : "other", raw };
 }
 
 const STATUS_PREFIXES: [string, RfqStatus][] = [
