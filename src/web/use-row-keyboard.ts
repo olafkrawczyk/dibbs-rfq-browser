@@ -31,7 +31,8 @@ export function useRowKeyboard(rows: Rfq[], open: (url: string) => void): number
         if (row.links.pdf) open(row.links.pdf);
         return;
       }
-      if (e.key === "Enter" && row) {
+      // Enter on a focused button/link activates that control instead.
+      if (e.key === "Enter" && row && !(e.target instanceof Element && e.target.closest("button, a"))) {
         e.preventDefault();
         open(row.links.dibbs);
         return;

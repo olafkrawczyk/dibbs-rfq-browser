@@ -71,11 +71,14 @@ function Actions({ rfq }: { rfq: Rfq }) {
   );
 }
 
-export function RfqRow({ rfq, today, focused = false }: { rfq: Rfq; today: IsoDate; focused?: boolean }) {
+type RowProps = { rfq: Rfq; today: IsoDate; index: number; focused?: boolean };
+
+export function RfqRow({ rfq, today, index, focused = false }: RowProps) {
   const due = returnByLabel(rfq.returnByDate, today);
   const muted = rfq.status !== "open";
   return (
     <TableRow
+      data-row-index={index}
       data-state={focused ? "selected" : undefined}
       aria-selected={focused}
       className={cn(muted && "text-muted-foreground opacity-70")}

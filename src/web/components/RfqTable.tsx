@@ -69,7 +69,7 @@ export function RfqTable({ rows, today, sort, onSort, focusedIndex, empty }: Pro
               <TableCell colSpan={COLUMNS.length} className="py-12 text-center">{empty}</TableCell>
             </TableRow>
           )}
-          {rows?.map((r, i) => <RfqRow key={r.id} rfq={r} today={today} focused={i === focusedIndex} />)}
+          {rows?.map((r, i) => <RfqRow key={r.id} rfq={r} today={today} index={i} focused={i === focusedIndex} />)}
         </TableBody>
       </Table>
     </div>

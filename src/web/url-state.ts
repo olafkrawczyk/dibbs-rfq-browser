@@ -22,6 +22,12 @@ export function nextUrlState(cur: UrlState, next: Partial<RfqQuery>, opts: Parti
   };
 }
 
+/** "Clear all": every filter back to its default (optional ones removed), keeping sort and page size. */
+export const clearFilters = (cur: UrlState): UrlState => ({
+  query: DEFAULT_QUERY,
+  options: { ...cur.options, page: 1 },
+});
+
 export const toSearch = (s: UrlState): string => {
   const p = toSearchParams(s.query, s.options).toString();
   return p ? `?${p}` : "";

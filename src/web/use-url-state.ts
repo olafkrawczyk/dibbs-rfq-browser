@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
 import type { ListOptions, RfqQuery } from "../shared/schemas";
-import { nextUrlState, readUrlState, toSearch, type UrlState } from "./url-state";
+import { clearFilters, nextUrlState, readUrlState, toSearch, type UrlState } from "./url-state";
 
 const INVALID_TOAST = "Some filters in the link were invalid and were reset";
 
@@ -27,13 +27,18 @@ export function useUrlState() {
     return () => window.removeEventListener("popstate", onPop);
   }, []);
 
-  const set = useCallback((next: Partial<RfqQuery>, opts?: Partial<ListOptions>) => {
-    const updated = nextUrlState(current.current, next, opts);
+  const go = useCallback((updated: UrlState) => {
     const search = toSearch(updated);
     if (search !== window.location.search) window.history.pushState(null, "", window.location.pathname + search);
     current.current = updated;
     setState(updated);
   }, []);
 
-  return { query: state.query, options: state.options, set };
+  const set = useCallback(
+    (next: Partial<RfqQuery>, opts?: Partial<ListOptions>) => go(nextUrlState(current.current, next, opts)),
+    [go],
+  );
+  const clear = useCallback(() => go(clearFilters(current.current)), [go]);
+
+  return { query: state.query, options: state.options, set, clear };
 }
