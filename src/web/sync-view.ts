@@ -28,12 +28,17 @@ const TONE: Record<string, BadgeTone> = { complete: "ok", partial: "warn", faile
 export function dataBadge(dataAsOf: string | null, lastRun: SyncRun | null, formatTime = localHhmm): DataBadge {
   if (!lastRun) return { text: dataAsOf ? `Data as of ${formatTime(dataAsOf)}` : "No data yet", tone: "muted", details: [] };
   const complete = lastRun.days.filter((d) => d.status === "complete").length;
-  const days = `${complete}/${lastRun.days.length} days${lastRun.status === "complete" ? " ✓" : ""}`;
+  // Days capped by SYNC_MAX_PAGES_PER_DAY are "complete" for what was fetched, but must not read as a full sync.
+  const capPages = Math.max(0, ...lastRun.days.filter((d) => d.truncated).map((d) => d.pages ?? 0));
+  const capped = capPages > 0;
+  const days = `${complete}/${lastRun.days.length} days${lastRun.status === "complete" && !capped ? " ✓" : ""}`;
   const head = dataAsOf ? `Data as of ${formatTime(dataAsOf)}` : "Last sync failed";
+  const tone = TONE[lastRun.status] ?? "muted";
   return {
-    text: `${head} · ${days}`,
-    tone: TONE[lastRun.status] ?? "muted",
-    details: lastRun.days.map((d) => `${d.date}: ${d.parsed}/${d.expected ?? "?"}${d.error ? ` (${d.error})` : ""}`),
+    text: `${head} · ${days}${capped ? ` · first ${capPages} pages/day only` : ""}`,
+    tone: capped && tone === "ok" ? "warn" : tone,
+    details: lastRun.days.map((d) =>
+      `${d.date}: ${d.parsed}/${d.expected ?? "?"}${d.truncated ? ` (first ${d.pages} pages only)` : ""}${d.error ? ` (${d.error})` : ""}`),
   };
 }
 

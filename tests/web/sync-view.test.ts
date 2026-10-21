@@ -40,3 +40,12 @@ test("data badge: partial is amber, failed is red, none is muted", () => {
   expect(dataBadge(null, run("failed", [day("2026-10-20", "failed", 0)]), hhmm)).toMatchObject({ tone: "error" });
   expect(dataBadge(null, null, hhmm)).toEqual({ text: "No data yet", tone: "muted", details: [] });
 });
+
+test("data badge: capped days are flagged, not shown as a full sync", () => {
+  const capped = (date: string) => ({ ...day(date, "complete", 100, 2), expected: 2148, truncated: true });
+  const b = dataBadge("2026-10-21T14:05:00Z", run("complete", [capped("2026-10-20"), capped("2026-10-21")]), hhmm);
+  expect(b).toEqual({
+    text: "Data as of 14:05 · 2/2 days · first 2 pages/day only", tone: "warn",
+    details: ["2026-10-20: 100/2148 (first 2 pages only)", "2026-10-21: 100/2148 (first 2 pages only)"],
+  });
+});
