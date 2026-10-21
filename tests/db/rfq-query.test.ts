@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { buildCountQuery, buildFacetQuery, buildListQuery, escapeLike } from "../../src/db/rfq-query";
+import { buildCountQuery, buildFacetQuery, buildListQuery, escapeLike, pgArray } from "../../src/db/rfq-query";
 import { IsoDate } from "../../src/shared/brand";
 import { DEFAULT_LIST_OPTIONS as OPTS, DEFAULT_QUERY as Q, type RfqQuery } from "../../src/shared/schemas";
 
@@ -10,12 +10,12 @@ test("default query filters window and open, sorts by posted desc", () => {
   const { text, values } = buildListQuery(Q, OPTS, W);
   expect(text).toContain("posted_date = any(");
   expect(text).toMatch(/order by posted_date desc, return_by_date asc nulls last, id/i);
-  expect(values).toContainEqual(["open"]);
-  expect(values).toContainEqual(["2026-10-20"]);
+  expect(values).toContain('{"open"}');
+  expect(values).toContain('{"2026-10-20"}');
 });
 
 test("explicit postedOn overrides the window", () => {
-  expect(buildListQuery(q({ postedOn: [IsoDate.parse("2026-10-01")] }), OPTS, W).values).toContainEqual(["2026-10-01"]);
+  expect(buildListQuery(q({ postedOn: [IsoDate.parse("2026-10-01")] }), OPTS, W).values).toContain('{"2026-10-01"}');
 });
 
 test("escapes like wildcards", () => {
@@ -58,12 +58,17 @@ test("count query has no paging", () => {
 
 test("facet excludes its own filter", () => {
   const f = buildFacetQuery("setAside", q({ setAside: ["small_business"], fsc: ["8315" as never] }), W);
-  expect(f.values).not.toContainEqual(["small_business"]);
-  expect(f.values).toContainEqual(["8315"]);
+  expect(f.values).not.toContain('{"small_business"}');
+  expect(f.values).toContain('{"8315"}');
   expect(f.text).toMatch(/group by 1/);
 });
 
 test("postedOn facet keeps the window restriction", () => {
   const f = buildFacetQuery("postedOn", q({ postedOn: [IsoDate.parse("2026-10-20")] }), [...W, IsoDate.parse("2026-10-19")]);
-  expect(f.values).toContainEqual(["2026-10-20", "2026-10-19"]);
+  expect(f.values).toContain('{"2026-10-20","2026-10-19"}');
+});
+
+test("pgArray quotes and escapes", () => {
+  expect(pgArray(["a", 'b"c', "d\\e"])).toBe('{"a","b\\"c","d\\\\e"}');
+  expect(pgArray([])).toBe("{}");
 });

@@ -13,18 +13,25 @@ const params = (): Params => {
 type Ctx = { q: RfqQuery; windowDates: IsoDate[]; p: Params };
 type Predicate = (ctx: Ctx) => string | null;
 
-export const RFQ_COLUMNS = `id, solicitation_number, nsn, part_number, fsc, nomenclature, item_name, mil_spec,
-  quantity, pr_number, status, status_raw, set_aside, set_aside_raw, tech_docs, posted_date, issue_date,
-  return_by_date, dibbs_url, pdf_url, tech_docs_url, first_seen_at, last_seen_at`;
+/** Dates come back as text (YYYY-MM-DD) and ids as int, so rows map to DTOs without timezone surprises. */
+export const RFQ_COLUMNS = `id::int as id, solicitation_number, nsn, part_number, fsc, nomenclature, item_name,
+  mil_spec, quantity, pr_number, status, status_raw, set_aside, set_aside_raw, tech_docs,
+  posted_date::text as posted_date, issue_date::text as issue_date, return_by_date::text as return_by_date,
+  dibbs_url, pdf_url, tech_docs_url, first_seen_at, last_seen_at`;
 
 export function escapeLike(s: string): string {
   return s.replace(/[\\%_]/g, (c) => `\\${c}`);
 }
 
+/** JS array → Postgres array literal. Bun SQL binds JS arrays as "a,b", so arrays go in as literals. */
+export function pgArray(values: readonly unknown[]): string {
+  return `{${values.map((v) => `"${String(v).replace(/[\\"]/g, (c) => `\\${c}`)}"`).join(",")}}`;
+}
+
 const NUMERIC_Q = /^\d{1,3}(,\d{3})+$|^\d+$/;
 
 const anyOf = (column: string, cast: string) => (values: readonly string[], p: Params) =>
-  values.length ? `${column} = any(${p.add([...values])}::${cast}[])` : null;
+  values.length ? `${column} = any(${p.add(pgArray(values))}::${cast}[])` : null;
 
 /** One predicate per filter field (spec §12 hook: adding a filter = one entry here + one schema field). */
 const PREDICATES: Record<string, Predicate> = {
@@ -33,7 +40,7 @@ const PREDICATES: Record<string, Predicate> = {
   fsc: ({ q, p }) => anyOf("fsc", "text")(q.fsc, p),
   itemName: ({ q, p }) => anyOf("item_name", "text")(q.itemName, p),
   postedOn: ({ q, windowDates, p }) =>
-    `posted_date = any(${p.add([...(q.postedOn.length ? q.postedOn : windowDates)])}::date[])`,
+    `posted_date = any(${p.add(pgArray(q.postedOn.length ? q.postedOn : windowDates))}::date[])`,
   q: ({ q, p }) => {
     if (!q.q) return null;
     const ors = [`search_text ilike ${p.add(`%${escapeLike(q.q)}%`)} escape '\\'`];
