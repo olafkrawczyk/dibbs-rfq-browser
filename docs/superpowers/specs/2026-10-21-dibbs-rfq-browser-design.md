@@ -29,6 +29,12 @@ Scope is an MLP: small, but trustworthy and complete end to end.
   `butAgree=OK`. Cookies (`SessionId`, `dw`, `di`, `TS…`) must be kept.
   Consequence for users: a shared DIBBS link shows the DoD notice once per
   browser session, then forwards to the target page.
+- **Solicitation PDFs** are served from a second host,
+  `dibbs2.bsm.dla.mil/Downloads/RFQ/<last char of sol>/<SOL>.PDF`, which has
+  its **own** consent wall and cookie (verified: after OK, real
+  `application/pdf` is returned). Only ~70% of rows link a direct PDF; the
+  rest link a package/attachments page (`RFQRec.aspx?sn=`). We store the PDF
+  URL only when DIBBS lists it and never construct one from the pattern.
 - **Paging.** 50 rows per page. Pages are ASP.NET postbacks:
   `__EVENTTARGET=ctl00$cph1$grdRfqSearch`, `__EVENTARGUMENT=Page$N`, plus all
   hidden fields of the *current* page. Event validation only allows page
@@ -330,13 +336,23 @@ React + shadcn/ui + Tailwind via Bun HTML imports; TanStack Query
   Item name (searchable, counts), Closes within (3/7/14 days or range),
   Posted (window dates), Quantity (min/max), Tech docs. Active filters as
   removable chips + "Clear all".
-- **Table**: NSN (dashed, copy button, Mil-Spec tag) · Nomenclature (tooltip:
+- **Table**: Solicitation (links to the PDF in a new tab when one exists;
+  otherwise to the package page, with a small "package" label) · NSN
+  (dashed, copy button, Mil-Spec tag) · Nomenclature (tooltip:
   "DIBBS truncates names — open the RFQ for the full description") · Qty ·
   Set-aside · Posted · Return by (date + relative "in 5d"; amber < 3 days) ·
-  Status (non-open rows muted) · actions: **Open on DIBBS ↗**, PDF, NSN
-  history. Sortable headers (incl. Qty, right-aligned with thousands separators), pagination with page size.
-- **DoD notice hint**: on first outbound DIBBS click, a dismissible note
-  ("DIBBS shows a DoD notice first — click OK and you'll land on this RFQ");
+  Status (non-open rows muted) · actions: **PDF** (disabled with tooltip
+  "No PDF listed — open the package on DIBBS" when absent), **Open on
+  DIBBS ↗**, NSN history. All outbound links use `target="_blank"
+  rel="noopener noreferrer"`. Sortable headers (incl. Qty, right-aligned with thousands separators), pagination with page size.
+- **Keyboard**: `j`/`k` or arrow keys move the row focus, `p` opens the
+  focused row's PDF, `Enter` opens it on DIBBS, `/` focuses search.
+- **PDFs are linked directly to DIBBS**, not proxied: no server load, and
+  users see DIBBS's DoD notice themselves rather than our server accepting
+  it on their behalf.
+- **DoD notice hint**: on first outbound DIBBS or PDF click, a dismissible
+  note ("DIBBS shows a DoD notice first (PDFs have their own, once per
+  session) — click OK and you'll land on this RFQ");
   "don't show again" stored in `localStorage` (wrapped in try/catch).
 - **States**: skeleton rows; empty state with "Clear filters"; error banner
   with retry; empty DB → "No data yet" with Sync button.
@@ -374,7 +390,7 @@ new; status = nothing disappears silently.
 
 ## 10. Out of scope (MLP)
 
-Saved searches / alerts (designed for in §12, not built), RFQ detail drawer, scraping per-solicitation detail
+Saved searches / alerts (designed for in §12, not built), PDF proxy or inline preview, RFQ detail drawer, scraping per-solicitation detail
 pages, CSV export, auth, deployment.
 
 ## 11. Risks
